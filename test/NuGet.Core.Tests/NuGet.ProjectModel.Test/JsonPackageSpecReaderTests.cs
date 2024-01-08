@@ -15,6 +15,7 @@ using NuGet.LibraryModel;
 using NuGet.Packaging.Core;
 using NuGet.RuntimeModel;
 using NuGet.Versioning;
+using Test.Utility;
 using Xunit;
 
 namespace NuGet.ProjectModel.Test
@@ -2996,6 +2997,48 @@ namespace NuGet.ProjectModel.Test
             Assert.Equal(expectedValue, packageSpec.RestoreMetadata.CentralPackageVersionsEnabled);
         }
 
+        [Theory]
+        [InlineData(null, false)]
+        [InlineData(true, true)]
+        [InlineData(false, false)]
+        public void GetPackageSpec_WhenCentralPackageFloatingVersionsEnabledValueIsValid_ReturnsCentralPackageFloatingVersionsEnabled(
+            bool? value,
+            bool expectedValue)
+        {
+            var json = $"{{\"restore\":{{\"centralPackageFloatingVersionsEnabled\":{(value.HasValue ? value.ToString().ToLowerInvariant() : "null")}}}}}";
+            PackageSpec packageSpec = GetPackageSpec(json);
+
+            Assert.Equal(expectedValue, packageSpec.RestoreMetadata.CentralPackageFloatingVersionsEnabled);
+        }
+
+        [Theory]
+        [InlineData(null, false)]
+        [InlineData(true, true)]
+        [InlineData(false, false)]
+        public void GetPackageSpec_WhenCentralPackageVersionOverrideDisabledValueIsValid_ReturnsCentralPackageVersionOverrideDisabled(
+            bool? value,
+            bool expectedValue)
+        {
+            var json = $"{{\"restore\":{{\"centralPackageVersionOverrideDisabled\":{(value.HasValue ? value.ToString().ToLowerInvariant() : "null")}}}}}";
+            PackageSpec packageSpec = GetPackageSpec(json);
+
+            Assert.Equal(expectedValue, packageSpec.RestoreMetadata.CentralPackageVersionOverrideDisabled);
+        }
+
+        [Theory]
+        [InlineData(null, false)]
+        [InlineData(true, true)]
+        [InlineData(false, false)]
+        public void GetPackageSpec_WhenCentralPackageTransitivePinningEnabledValueIsValid_ReturnsCentralPackageTransitivePinningEnabled(
+            bool? value,
+            bool expectedValue)
+        {
+            var json = $"{{\"restore\":{{\"CentralPackageTransitivePinningEnabled\":{(value.HasValue ? value.ToString().ToLowerInvariant() : "null")}}}}}";
+            PackageSpec packageSpec = GetPackageSpec(json);
+
+            Assert.Equal(expectedValue, packageSpec.RestoreMetadata.CentralPackageTransitivePinningEnabled);
+        }
+
         [Fact]
         public void GetPackageSpec_WhenSourcesValueIsEmptyObject_ReturnsEmptySources()
         {
@@ -3594,6 +3637,111 @@ namespace NuGet.ProjectModel.Test
             packageSpec.RestoreMetadata.RestoreAuditProperties.EnableAudit.Should().Be("a");
             packageSpec.RestoreMetadata.RestoreAuditProperties.AuditLevel.Should().Be("b");
             packageSpec.RestoreMetadata.RestoreAuditProperties.AuditMode.Should().Be("c");
+        }
+
+        [Fact]
+        public void GetPackageSpec_RestoreMetadataWithoutMacros_WithMacrosEnabled()
+        {
+            // Arrange
+            var json = @"{  
+                            ""restore"": {
+    ""projectUniqueName"": ""C:\\Users\\me\\source\\code\\project.csproj"",
+    ""projectName"": ""project"",
+    ""projectPath"": ""C:\\Users\\me\\source\\code\\project.csproj"",
+    ""projectJsonPath"": ""C:\\Users\\me\\source\\code\\project.json"",
+    ""packagesPath"": ""C:\\Users\\me\\.nuget\\packages"",
+    ""outputPath"": ""C:\\Users\\me\\source\\code\\obj"",
+    ""projectStyle"": ""PackageReference"",
+    ""crossTargeting"": true,
+    ""configFilePaths"": [
+        ""C:\\Users\\me\\source\\code\\NuGet.Config"",
+        ""C:\\Users\\me\\AppData\\Roaming\\NuGet\\NuGet.Config"",
+        ""C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config"",
+        ""C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config""
+    ],
+    ""fallbackFolders"": [
+        ""C:\\Program Files\\dotnet\\sdk\\NuGetFallbackFolder"",
+        ""C:\\Users\\me\\fallbackFolder""
+
+
+    ]
+  }
+}";
+            var environmentReader = new TestEnvironmentVariableReader(new Dictionary<string, string>()
+                {
+                    { MacroStringsUtility.NUGET_ENABLE_EXPERIMENTAL_MACROS, "true" }
+            });
+
+            PackageSpec actual = PackageSpecTestUtility.GetPackageSpec(json, environmentReader);
+
+            // Assert
+            var metadata = actual.RestoreMetadata;
+
+            Assert.NotNull(metadata);
+            metadata.ProjectUniqueName.Should().Be(@"C:\Users\me\source\code\project.csproj");
+            metadata.ProjectPath.Should().Be(@"C:\Users\me\source\code\project.csproj");
+            metadata.ProjectJsonPath.Should().Be(@"C:\Users\me\source\code\project.json");
+            metadata.PackagesPath.Should().Be(@"C:\Users\me\.nuget\packages");
+            metadata.OutputPath.Should().Be(@"C:\Users\me\source\code\obj");
+
+            metadata.ConfigFilePaths.Should().Contain(@"C:\Users\me\source\code\NuGet.Config");
+            metadata.ConfigFilePaths.Should().Contain(@"C:\Program Files (x86)\NuGet\Config\Microsoft.VisualStudio.FallbackLocation.config");
+            metadata.ConfigFilePaths.Should().Contain(@"C:\Program Files (x86)\NuGet\Config\Microsoft.VisualStudio.Offline.config");
+            metadata.ConfigFilePaths.Should().Contain(@"C:\Users\me\AppData\Roaming\NuGet\NuGet.Config");
+
+            metadata.FallbackFolders.Should().Contain(@"C:\Program Files\dotnet\sdk\NuGetFallbackFolder");
+            metadata.FallbackFolders.Should().Contain(@"C:\Users\me\fallbackFolder");
+        }
+
+        [Fact]
+        public void GetPackageSpec_RestoreMetadataWithMacros()
+        {
+            // Arrange
+            var json = @"{  
+                            ""restore"": {
+    ""projectUniqueName"": ""C:\\users\\me\\source\\code\\project.csproj"",
+    ""projectName"": ""project"",
+    ""projectPath"": ""C:\\users\\me\\source\\code\\project.csproj"",
+    ""projectJsonPath"": ""C:\\users\\me\\source\\code\\project.json"",
+    ""packagesPath"": ""$(User).nuget\\packages"",
+    ""outputPath"": ""C:\\users\\me\\source\\code\\obj"",
+    ""projectStyle"": ""PackageReference"",
+    ""crossTargeting"": true,
+    ""configFilePaths"": [
+        ""$(User)source\\code\\NuGet.Config"",
+        ""$(User)AppData\\Roaming\\NuGet\\NuGet.Config"",
+        ""C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config"",
+        ""C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config""
+    ],
+    ""fallbackFolders"": [
+        ""C:\\Program Files\\dotnet\\sdk\\NuGetFallbackFolder"",
+        ""$(User)fallbackFolder""
+
+
+    ]
+  }
+}";
+            var environmentReader = new TestEnvironmentVariableReader(new Dictionary<string, string>()
+                {
+                    { MacroStringsUtility.NUGET_ENABLE_EXPERIMENTAL_MACROS, "true" }
+            });
+
+            PackageSpec actual = PackageSpecTestUtility.GetPackageSpec(json, environmentReader);
+
+            // Assert
+            var metadata = actual.RestoreMetadata;
+            var userSettingsDirectory = NuGetEnvironment.GetFolderPath(NuGetFolderPath.UserSettingsDirectory);
+
+            Assert.NotNull(metadata);
+            metadata.PackagesPath.Should().Be(@$"{userSettingsDirectory}.nuget\packages");
+
+            metadata.ConfigFilePaths.Should().Contain(@$"{userSettingsDirectory}source\code\NuGet.Config");
+            metadata.ConfigFilePaths.Should().Contain(@"C:\Program Files (x86)\NuGet\Config\Microsoft.VisualStudio.FallbackLocation.config");
+            metadata.ConfigFilePaths.Should().Contain(@"C:\Program Files (x86)\NuGet\Config\Microsoft.VisualStudio.Offline.config");
+            metadata.ConfigFilePaths.Should().Contain(@$"{userSettingsDirectory}AppData\Roaming\NuGet\NuGet.Config");
+
+            metadata.FallbackFolders.Should().Contain(@"C:\Program Files\dotnet\sdk\NuGetFallbackFolder");
+            metadata.FallbackFolders.Should().Contain(@$"{userSettingsDirectory}fallbackFolder");
         }
 
         private static PackageSpec GetPackageSpec(string json)
